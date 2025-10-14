@@ -1,0 +1,23 @@
+# Projeto Mymoney - arquivos e pastas para ignorar
+
+# Banco de dados e dados locais
+data/
+
+# Artefatos de build/empacotamento
+build/
+dist/
+
+# Ambiente virtual
+.venv/
+
+# Arquivos temporários do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Variáveis de ambiente
+.env
+
+# Especificação do PyInstaller (opcional manter)
+# Mymoney.spec
