@@ -26,7 +26,11 @@ class MainWindow(QMainWindow):
         self.expense_edit_index = None
         self.revenue_edit_index = None
         self._setup_ui()
+        self.setMinimumSize(1024, 700)
+        self.resize(1280, 800)
         self._apply_theme()
+        # Garantir que os combos de categoria sejam preenchidos na inicialização
+        self._load_categories()
         self._refresh_tables()
 
     def _setup_ui(self):
