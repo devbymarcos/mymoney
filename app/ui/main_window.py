@@ -505,8 +505,9 @@ class MainWindow(QMainWindow):
             QMainWindow { background: #f8fafc; }
             QLabel { font-size: 12px; }
             QTabWidget::pane { border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px; }
-            QTabBar::tab { background: #e5e7eb; padding: 8px 12px; border-radius: 6px; margin: 2px; }
-            QTabBar::tab:selected { background: #dbeafe; color: #1e40af; }
+            QTabBar::tab { background: #e5e7eb; color: #334155; padding: 8px 12px; border-radius: 6px; margin: 2px; }
+            QTabBar::tab:hover { background: #f1f5f9; color: #1f2937; }
+            QTabBar::tab:selected { background: #1d4ed8; color: #ffffff; font-weight: 700; padding: 10px 14px; border: 2px solid #1d4ed8; }
             QHeaderView::section { background: #eef2ff; padding: 6px; border: none; font-weight: 600; }
             QTableWidget { alternate-background-color: #ffffff; background: #f8fafc; }
             QTableWidget::item:selected { background: #bfdbfe; color: #111827; }
