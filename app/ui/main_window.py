@@ -512,8 +512,9 @@ class MainWindow(QMainWindow):
             QTableWidget { alternate-background-color: #ffffff; background: #f8fafc; }
             QTableWidget::item:selected { background: #bfdbfe; color: #111827; }
             QTableWidget::item:hover { background: #e0f2fe; }
-            QPushButton { background: #1d4ed8; color: white; border: none; padding: 8px 12px; border-radius: 6px; }
-            QPushButton:hover { background: #2563eb; }
+            QPushButton { background: #60a5fa; color: white; border: none; padding: 8px 12px; border-radius: 6px; }
+            QPushButton:hover { background: #3b82f6; }
+            QPushButton:pressed { background: #2563eb; }
             QPushButton:disabled { background: #9ca3af; color: #f3f4f6; }
             QPushButton[variant="secondary"] { background: transparent; color: #1d4ed8; border: 1px solid #93c5fd; }
             QPushButton[variant="secondary"]:hover { background: #eff6ff; }
