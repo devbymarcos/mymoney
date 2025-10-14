@@ -124,12 +124,12 @@ class MainWindow(QMainWindow):
         parent_layout.addLayout(form_layout)
 
         btn_layout = QHBoxLayout()
-        add_btn = QPushButton("Adicionar despesa"); add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); add_btn.clicked.connect(self._on_add_expense)
-        delete_btn = QPushButton("Excluir selecionado(s)"); delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); delete_btn.setProperty('variant', 'secondary'); delete_btn.clicked.connect(self._on_delete_expense)
+        self.expense_add_btn = QPushButton("Adicionar despesa"); self.expense_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.expense_add_btn.clicked.connect(self._on_add_expense)
+        self.expense_delete_btn = QPushButton("Excluir selecionado(s)"); self.expense_delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); self.expense_delete_btn.setProperty('variant', 'secondary'); self.expense_delete_btn.clicked.connect(self._on_delete_expense)
         edit_btn = QPushButton("Editar selecionado"); edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); edit_btn.setProperty('variant', 'secondary'); edit_btn.clicked.connect(self._on_edit_expense_prepare)
         self.expense_save_edit_btn = QPushButton("Salvar edição"); self.expense_save_edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "save.svg"))); self.expense_save_edit_btn.setProperty('variant', 'secondary'); self.expense_save_edit_btn.setEnabled(False); self.expense_save_edit_btn.clicked.connect(self._on_save_expense_edit)
-        btn_layout.addWidget(add_btn)
-        btn_layout.addWidget(delete_btn)
+        btn_layout.addWidget(self.expense_add_btn)
+        btn_layout.addWidget(self.expense_delete_btn)
         btn_layout.addWidget(edit_btn)
         btn_layout.addWidget(self.expense_save_edit_btn)
         parent_layout.addLayout(btn_layout)
@@ -170,12 +170,12 @@ class MainWindow(QMainWindow):
         parent_layout.addLayout(form_layout)
 
         btn_layout = QHBoxLayout()
-        add_btn = QPushButton("Adicionar receita"); add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); add_btn.clicked.connect(self._on_add_revenue)
-        delete_btn = QPushButton("Excluir selecionado(s)"); delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); delete_btn.setProperty('variant', 'secondary'); delete_btn.clicked.connect(self._on_delete_revenue)
+        self.revenue_add_btn = QPushButton("Adicionar receita"); self.revenue_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.revenue_add_btn.clicked.connect(self._on_add_revenue)
+        self.revenue_delete_btn = QPushButton("Excluir selecionado(s)"); self.revenue_delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); self.revenue_delete_btn.setProperty('variant', 'secondary'); self.revenue_delete_btn.clicked.connect(self._on_delete_revenue)
         edit_btn = QPushButton("Editar selecionado"); edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); edit_btn.setProperty('variant', 'secondary'); edit_btn.clicked.connect(self._on_edit_revenue_prepare)
         self.revenue_save_edit_btn = QPushButton("Salvar edição"); self.revenue_save_edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "save.svg"))); self.revenue_save_edit_btn.setProperty('variant', 'secondary'); self.revenue_save_edit_btn.setEnabled(False); self.revenue_save_edit_btn.clicked.connect(self._on_save_revenue_edit)
-        btn_layout.addWidget(add_btn)
-        btn_layout.addWidget(delete_btn)
+        btn_layout.addWidget(self.revenue_add_btn)
+        btn_layout.addWidget(self.revenue_delete_btn)
         btn_layout.addWidget(edit_btn)
         btn_layout.addWidget(self.revenue_save_edit_btn)
         parent_layout.addLayout(btn_layout)
@@ -254,6 +254,11 @@ class MainWindow(QMainWindow):
         self.expense_amount_edit.setText(format_currency_brl(amount).replace("R$ ", ""))
         self.expense_edit_index = row
         self.expense_save_edit_btn.setEnabled(True)
+        # Desativa ações de adicionar e excluir enquanto edita
+        if hasattr(self, 'expense_add_btn'):
+            self.expense_add_btn.setEnabled(False)
+        if hasattr(self, 'expense_delete_btn'):
+            self.expense_delete_btn.setEnabled(False)
 
     def _on_save_expense_edit(self):
         if self.expense_edit_index is None:
@@ -268,6 +273,11 @@ class MainWindow(QMainWindow):
         # Reset edição
         self.expense_edit_index = None
         self.expense_save_edit_btn.setEnabled(False)
+        # Reativa ações de adicionar e excluir
+        if hasattr(self, 'expense_add_btn'):
+            self.expense_add_btn.setEnabled(True)
+        if hasattr(self, 'expense_delete_btn'):
+            self.expense_delete_btn.setEnabled(True)
         self.expense_description_edit.clear()
         self.expense_amount_edit.clear()
         self._refresh_tables()
@@ -300,6 +310,11 @@ class MainWindow(QMainWindow):
         self.revenue_amount_edit.setText(format_currency_brl(amount).replace("R$ ", ""))
         self.revenue_edit_index = row
         self.revenue_save_edit_btn.setEnabled(True)
+        # Desativa ações de adicionar e excluir enquanto edita
+        if hasattr(self, 'revenue_add_btn'):
+            self.revenue_add_btn.setEnabled(False)
+        if hasattr(self, 'revenue_delete_btn'):
+            self.revenue_delete_btn.setEnabled(False)
 
     def _on_save_revenue_edit(self):
         if self.revenue_edit_index is None:
@@ -313,6 +328,11 @@ class MainWindow(QMainWindow):
         self.revenue_controller.update_revenue(self.revenue_edit_index, date_str, category, description, amount)
         self.revenue_edit_index = None
         self.revenue_save_edit_btn.setEnabled(False)
+        # Reativa ações de adicionar e excluir
+        if hasattr(self, 'revenue_add_btn'):
+            self.revenue_add_btn.setEnabled(True)
+        if hasattr(self, 'revenue_delete_btn'):
+            self.revenue_delete_btn.setEnabled(True)
         self.revenue_description_edit.clear()
         self.revenue_amount_edit.clear()
         self._refresh_tables()
