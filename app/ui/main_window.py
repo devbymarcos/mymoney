@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QFormLayout, QLineEdit,
-    QComboBox, QDateEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QLabel, QHBoxLayout, QTabWidget, QHeaderView, QFrame, QInputDialog, QMessageBox
+    QMainWindow, QWidget, QVBoxLayout,
+    QDateEdit, QTableWidget, QTableWidgetItem,
+    QLabel, QHBoxLayout, QTabWidget, QHeaderView, QFrame
 )
 import os
 from PyQt5.QtCore import QDate, Qt, QSize, QLocale
@@ -12,10 +12,12 @@ from app.controllers.expense_controller import ExpenseController
 from app.controllers.revenue_controller import RevenueController
 from app.controllers.investment_controller import InvestmentController
 from app.utils.formatting import format_currency_brl, format_date_brl
-from app.ui.widgets.money_line_edit import MoneyLineEdit
 from app.config import ICONS_DIR
 from app.services.category_service import CategoryService
 from app.services.broker_service import BrokerService
+from app.ui.tabs.investments_tab import InvestmentsTab
+from app.ui.tabs.expenses_tab import ExpensesTab
+from app.ui.tabs.revenues_tab import RevenuesTab
 
 
 class MainWindow(QMainWindow):
@@ -75,35 +77,29 @@ class MainWindow(QMainWindow):
             pass
         layout.addWidget(self.tabs)
 
-        # Aba Despesas
-        expense_tab = QWidget()
-        expense_layout = QVBoxLayout(); expense_tab.setLayout(expense_layout)
-        self._build_expense_section(expense_layout)
-        self.tabs.addTab(expense_tab, "Despesas")
-        self.tabs.setTabIcon(0, QIcon(os.path.join(ICONS_DIR, "expense.svg")))
+        # Aba Despesas (extraída para classe dedicada)
+        self.expenses_tab = ExpensesTab(self.expense_controller, self.category_service, self._refresh_tables, getattr(self, '_refresh_reports', None))
+        self.tabs.addTab(self.expenses_tab, "Despesas")
+        self.tabs.setTabIcon(self.tabs.indexOf(self.expenses_tab), QIcon(os.path.join(ICONS_DIR, "expense.svg")))
 
-        # Aba Receitas
-        revenue_tab = QWidget()
-        revenue_layout = QVBoxLayout(); revenue_tab.setLayout(revenue_layout)
-        self._build_revenue_section(revenue_layout)
-        self.tabs.addTab(revenue_tab, "Receitas")
-        self.tabs.setTabIcon(1, QIcon(os.path.join(ICONS_DIR, "revenue.svg")))
+        # Aba Receitas (extraída para classe dedicada)
+        self.revenues_tab = RevenuesTab(self.revenue_controller, self.category_service, self._refresh_tables, getattr(self, '_refresh_reports', None))
+        self.tabs.addTab(self.revenues_tab, "Receitas")
+        self.tabs.setTabIcon(self.tabs.indexOf(self.revenues_tab), QIcon(os.path.join(ICONS_DIR, "revenue.svg")))
 
-        # Aba Investimentos
-        investments_tab = QWidget()
-        investments_layout = QVBoxLayout(); investments_tab.setLayout(investments_layout)
-        self._build_investments_section(investments_layout)
-        self.tabs.addTab(investments_tab, "Investimentos")
+        # Aba Investimentos (extraída para classe dedicada)
+        self.investments_tab = InvestmentsTab(self.investment_controller, self.broker_service)
+        self.tabs.addTab(self.investments_tab, "Investimentos")
         # Ícone será adicionado ao assets; se não existir, usa report.svg como fallback
         inv_icon_path = os.path.join(ICONS_DIR, "investment.svg")
-        self.tabs.setTabIcon(2, QIcon(inv_icon_path if os.path.exists(inv_icon_path) else os.path.join(ICONS_DIR, "report.svg")))
+        self.tabs.setTabIcon(self.tabs.indexOf(self.investments_tab), QIcon(inv_icon_path if os.path.exists(inv_icon_path) else os.path.join(ICONS_DIR, "report.svg")))
 
         # Aba Relatórios
         reports_tab = QWidget()
         reports_layout = QVBoxLayout(); reports_tab.setLayout(reports_layout)
         self._build_reports_section(reports_layout)
         self.tabs.addTab(reports_tab, "Relatórios")
-        self.tabs.setTabIcon(3, QIcon(os.path.join(ICONS_DIR, "report.svg")))
+        self.tabs.setTabIcon(self.tabs.indexOf(reports_tab), QIcon(os.path.join(ICONS_DIR, "report.svg")))
 
         # Totais gerais (cards)
         self.summary_container = QFrame()
@@ -137,212 +133,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.summary_container)
 
-    def _build_expense_section(self, parent_layout: QVBoxLayout):
-        form_layout = QFormLayout()
-        self.expense_date_edit = QDateEdit(); self.expense_date_edit.setCalendarPopup(True); self.expense_date_edit.setDisplayFormat("dd/MM/yyyy"); self.expense_date_edit.setDate(QDate.currentDate())
-        self.expense_category_box = QComboBox()
-        exp_cat_row = QHBoxLayout()
-        exp_cat_row.addWidget(self.expense_category_box)
-        self.expense_add_cat_btn = QPushButton(); self.expense_add_cat_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.expense_add_cat_btn.setProperty('variant','secondary'); self.expense_add_cat_btn.setToolTip("Nova categoria de despesa")
-        self.expense_add_cat_btn.clicked.connect(lambda: self._on_add_category('expense'))
-        self.expense_manage_cat_btn = QPushButton(); self.expense_manage_cat_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); self.expense_manage_cat_btn.setProperty('variant','secondary'); self.expense_manage_cat_btn.setToolTip("Gerenciar categorias de despesa")
-        self.expense_manage_cat_btn.clicked.connect(lambda: self._on_manage_categories('expense'))
-        exp_cat_row.addWidget(self.expense_add_cat_btn)
-        exp_cat_row.addWidget(self.expense_manage_cat_btn)
-        exp_cat_row_w = QWidget(); exp_cat_row_w.setLayout(exp_cat_row)
-        self.expense_description_edit = QLineEdit()
-        self.expense_amount_edit = MoneyLineEdit()
-
-        form_layout.addRow("Data:", self.expense_date_edit)
-        form_layout.addRow("Categoria:", exp_cat_row_w)
-        form_layout.addRow("Descrição:", self.expense_description_edit)
-        form_layout.addRow("Valor (R$):", self.expense_amount_edit)
-        parent_layout.addLayout(form_layout)
-
-        btn_layout = QHBoxLayout()
-        self.expense_add_btn = QPushButton("Adicionar despesa"); self.expense_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.expense_add_btn.clicked.connect(self._on_add_expense)
-        self.expense_delete_btn = QPushButton("Excluir selecionado(s)"); self.expense_delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); self.expense_delete_btn.setProperty('variant', 'secondary'); self.expense_delete_btn.clicked.connect(self._on_delete_expense)
-        edit_btn = QPushButton("Editar selecionado"); edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); edit_btn.setProperty('variant', 'secondary'); edit_btn.clicked.connect(self._on_edit_expense_prepare)
-        self.expense_save_edit_btn = QPushButton("Salvar edição"); self.expense_save_edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "save.svg"))); self.expense_save_edit_btn.setProperty('variant', 'secondary'); self.expense_save_edit_btn.setEnabled(False); self.expense_save_edit_btn.clicked.connect(self._on_save_expense_edit)
-        btn_layout.addWidget(self.expense_add_btn)
-        btn_layout.addWidget(self.expense_delete_btn)
-        btn_layout.addWidget(edit_btn)
-        btn_layout.addWidget(self.expense_save_edit_btn)
-        parent_layout.addLayout(btn_layout)
-
-        self.expense_table = QTableWidget(0, 4)
-        self.expense_table.setHorizontalHeaderLabels(["Data", "Categoria", "Descrição", "Valor (R$)"])
-        self.expense_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.expense_table.setAlternatingRowColors(True)
-        self.expense_table.setShowGrid(False)
-        # Seleção por linha, múltipla
-        self.expense_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.expense_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
-        parent_layout.addWidget(self.expense_table)
-
-        self.expense_total_label = QLabel("Total de despesas: R$ 0,00")
-        parent_layout.addWidget(self.expense_total_label)
-
-    def _build_revenue_section(self, parent_layout: QVBoxLayout):
-        form_layout = QFormLayout()
-        self.revenue_date_edit = QDateEdit(); self.revenue_date_edit.setCalendarPopup(True); self.revenue_date_edit.setDisplayFormat("dd/MM/yyyy"); self.revenue_date_edit.setDate(QDate.currentDate())
-        self.revenue_category_box = QComboBox()
-        rev_cat_row = QHBoxLayout()
-        rev_cat_row.addWidget(self.revenue_category_box)
-        self.revenue_add_cat_btn = QPushButton(); self.revenue_add_cat_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.revenue_add_cat_btn.setProperty('variant','secondary'); self.revenue_add_cat_btn.setToolTip("Nova categoria de receita")
-        self.revenue_add_cat_btn.clicked.connect(lambda: self._on_add_category('revenue'))
-        self.revenue_manage_cat_btn = QPushButton(); self.revenue_manage_cat_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); self.revenue_manage_cat_btn.setProperty('variant','secondary'); self.revenue_manage_cat_btn.setToolTip("Gerenciar categorias de receita")
-        self.revenue_manage_cat_btn.clicked.connect(lambda: self._on_manage_categories('revenue'))
-        rev_cat_row.addWidget(self.revenue_add_cat_btn)
-        rev_cat_row.addWidget(self.revenue_manage_cat_btn)
-        rev_cat_row_w = QWidget(); rev_cat_row_w.setLayout(rev_cat_row)
-        self.revenue_description_edit = QLineEdit()
-        self.revenue_amount_edit = MoneyLineEdit()
-
-        form_layout.addRow("Data:", self.revenue_date_edit)
-        form_layout.addRow("Categoria:", rev_cat_row_w)
-        form_layout.addRow("Descrição:", self.revenue_description_edit)
-        form_layout.addRow("Valor (R$):", self.revenue_amount_edit)
-        parent_layout.addLayout(form_layout)
-
-        btn_layout = QHBoxLayout()
-        self.revenue_add_btn = QPushButton("Adicionar receita"); self.revenue_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.revenue_add_btn.clicked.connect(self._on_add_revenue)
-        self.revenue_delete_btn = QPushButton("Excluir selecionado(s)"); self.revenue_delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); self.revenue_delete_btn.setProperty('variant', 'secondary'); self.revenue_delete_btn.clicked.connect(self._on_delete_revenue)
-        edit_btn = QPushButton("Editar selecionado"); edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); edit_btn.setProperty('variant', 'secondary'); edit_btn.clicked.connect(self._on_edit_revenue_prepare)
-        self.revenue_save_edit_btn = QPushButton("Salvar edição"); self.revenue_save_edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "save.svg"))); self.revenue_save_edit_btn.setProperty('variant', 'secondary'); self.revenue_save_edit_btn.setEnabled(False); self.revenue_save_edit_btn.clicked.connect(self._on_save_revenue_edit)
-        btn_layout.addWidget(self.revenue_add_btn)
-        btn_layout.addWidget(self.revenue_delete_btn)
-        btn_layout.addWidget(edit_btn)
-        btn_layout.addWidget(self.revenue_save_edit_btn)
-        parent_layout.addLayout(btn_layout)
-
-        # Tabela de receitas
-        self.revenue_table = QTableWidget(0, 4)
-        self.revenue_table.setHorizontalHeaderLabels(["Data", "Categoria", "Descrição", "Valor (R$)"])
-        self.revenue_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.revenue_table.setAlternatingRowColors(True)
-        self.revenue_table.setShowGrid(False)
-        self.revenue_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.revenue_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
-        parent_layout.addWidget(self.revenue_table)
-
-        self.revenue_total_label = QLabel("Total de receitas: R$ 0,00")
-        parent_layout.addWidget(self.revenue_total_label)
-
-    def _build_investments_section(self, parent_layout: QVBoxLayout):
-        # Sub-abas: Investimento e Aportes
-        investments_tabs = QTabWidget()
-        investments_tabs.setElideMode(Qt.ElideNone)
-        investments_tabs.setIconSize(QSize(16, 16))
-        # Expandir sub-abas para evitar corte do texto
-        try:
-            investments_tabs.tabBar().setExpanding(True)
-        except Exception:
-            pass
-        # Estilo mais suave para aba selecionada e padding adequado para não cortar texto
-        investments_tabs.setStyleSheet(
-            """
-            QTabWidget::pane { border: none; }
-            QTabBar::tab { padding: 10px 16px; padding-left: 18px; padding-right: 18px; min-width: 140px; margin: 2px; border-radius: 6px; }
-            QTabBar::tab:selected { background: #eaf1fb; color: #1f2937; font-weight: 600; border: 1px solid #c7d2fe; padding: 10px 16px; padding-left: 18px; padding-right: 18px; }
-            QTabBar::tab:hover { background: #f3f6fc; }
-            """
-        )
-
-        # Aba Investimento
-        inv_tab = QWidget()
-        inv_layout = QVBoxLayout(inv_tab)
-
-        form_layout = QFormLayout()
-        form_layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.investment_name_edit = QLineEdit()
-        # Corretora: combo + botões de cadastro/gerenciamento
-        self.investment_broker_box = QComboBox()
-        broker_row = QHBoxLayout()
-        broker_row.addWidget(self.investment_broker_box)
-        self.broker_add_btn = QPushButton(); self.broker_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.broker_add_btn.setProperty('variant','secondary'); self.broker_add_btn.setToolTip("Nova corretora")
-        self.broker_add_btn.clicked.connect(self._on_add_broker)
-        self.broker_manage_btn = QPushButton(); self.broker_manage_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); self.broker_manage_btn.setProperty('variant','secondary'); self.broker_manage_btn.setToolTip("Gerenciar corretoras")
-        self.broker_manage_btn.clicked.connect(self._on_manage_brokers)
-        broker_row.addWidget(self.broker_add_btn)
-        broker_row.addWidget(self.broker_manage_btn)
-        broker_row_w = QWidget(); broker_row_w.setLayout(broker_row)
-
-        self.investment_start_date_edit = QDateEdit(); self.investment_start_date_edit.setCalendarPopup(True); self.investment_start_date_edit.setDisplayFormat("dd/MM/yyyy"); self.investment_start_date_edit.setDate(QDate.currentDate())
-        self.investment_description_edit = QLineEdit()
-        self.investment_initial_amount_edit = MoneyLineEdit()
-
-        form_layout.addRow("Investimento:", self.investment_name_edit)
-        form_layout.addRow("Corretora:", broker_row_w)
-        form_layout.addRow("Data inicial:", self.investment_start_date_edit)
-        form_layout.addRow("Descrição:", self.investment_description_edit)
-        form_layout.addRow("Valor inicial (R$):", self.investment_initial_amount_edit)
-        inv_layout.addLayout(form_layout)
-
-        btn_layout = QHBoxLayout()
-        self.investment_add_btn = QPushButton("Adicionar investimento"); self.investment_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.investment_add_btn.clicked.connect(self._on_add_investment)
-        self.investment_delete_btn = QPushButton("Excluir selecionado(s)"); self.investment_delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); self.investment_delete_btn.setProperty('variant', 'secondary'); self.investment_delete_btn.clicked.connect(self._on_delete_investment)
-        inv_edit_btn = QPushButton("Editar selecionado"); inv_edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "edit.svg"))); inv_edit_btn.setProperty('variant', 'secondary'); inv_edit_btn.clicked.connect(self._on_edit_investment_prepare)
-        self.investment_save_edit_btn = QPushButton("Salvar edição"); self.investment_save_edit_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "save.svg"))); self.investment_save_edit_btn.setProperty('variant', 'secondary'); self.investment_save_edit_btn.setEnabled(False); self.investment_save_edit_btn.clicked.connect(self._on_save_investment_edit)
-        btn_layout.addWidget(self.investment_add_btn)
-        btn_layout.addWidget(self.investment_delete_btn)
-        btn_layout.addWidget(inv_edit_btn)
-        btn_layout.addWidget(self.investment_save_edit_btn)
-        inv_layout.addLayout(btn_layout)
-
-        self.investment_table = QTableWidget(0, 6)
-        self.investment_table.setHorizontalHeaderLabels(["Investimento", "Corretora", "Data", "Valor inicial (R$)", "Aportes (R$)", "Total investido (R$)"])
-        self.investment_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.investment_table.setAlternatingRowColors(True)
-        self.investment_table.setShowGrid(False)
-        self.investment_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.investment_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
-        self.investment_table.itemSelectionChanged.connect(self._on_investment_selection_changed)
-        inv_layout.addWidget(self.investment_table)
-
-        self.investment_total_label = QLabel("Total investido: R$ 0,00")
-        self.investment_total_label.setObjectName("cardTitle")
-        inv_layout.addWidget(self.investment_total_label)
-
-        # Aba Aportes
-        aport_tab = QWidget()
-        aport_layout = QVBoxLayout(aport_tab)
-
-        aporte_form = QFormLayout()
-        aporte_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.aporte_investment_box = QComboBox()
-        aporte_form.addRow("Investimento:", self.aporte_investment_box)
-        self.aporte_date_edit = QDateEdit(); self.aporte_date_edit.setCalendarPopup(True); self.aporte_date_edit.setDisplayFormat("dd/MM/yyyy"); self.aporte_date_edit.setDate(QDate.currentDate())
-        self.aporte_description_edit = QLineEdit()
-        self.aporte_amount_edit = MoneyLineEdit()
-        aporte_form.addRow("Data:", self.aporte_date_edit)
-        aporte_form.addRow("Descrição:", self.aporte_description_edit)
-        aporte_form.addRow("Valor (R$):", self.aporte_amount_edit)
-        aport_layout.addLayout(aporte_form)
-
-        aporte_btns = QHBoxLayout()
-        self.aporte_add_btn = QPushButton("Adicionar aporte"); self.aporte_add_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "plus.svg"))); self.aporte_add_btn.clicked.connect(self._on_add_aporte)
-        self.aporte_delete_btn = QPushButton("Excluir aporte(s)"); self.aporte_delete_btn.setIcon(QIcon(os.path.join(ICONS_DIR, "trash.svg"))); self.aporte_delete_btn.setProperty('variant','secondary'); self.aporte_delete_btn.clicked.connect(self._on_delete_aporte)
-        aporte_btns.addWidget(self.aporte_add_btn)
-        aporte_btns.addWidget(self.aporte_delete_btn)
-        aport_layout.addLayout(aporte_btns)
-
-        self.contributions_table = QTableWidget(0, 3)
-        self.contributions_table.setHorizontalHeaderLabels(["Data", "Descrição", "Valor (R$)"])
-        self.contributions_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.contributions_table.setAlternatingRowColors(True)
-        self.contributions_table.setShowGrid(False)
-        self.contributions_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.contributions_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
-        aport_layout.addWidget(self.contributions_table)
-
-        investments_tabs.addTab(inv_tab, "Investimento")
-        investments_tabs.addTab(aport_tab, "Aportes")
-        parent_layout.addWidget(investments_tabs)
-
-        # Carregar corretoras e investimentos
-        self._load_brokers()
-        self._refresh_investments()
+    
 
     def _build_reports_section(self, parent_layout: QVBoxLayout):
         # Título da seção
@@ -419,506 +210,22 @@ class MainWindow(QMainWindow):
         reports_tabs.setTabIcon(reports_tabs.indexOf(annual_tab), QIcon(os.path.join(ICONS_DIR, "annual.svg")))
         parent_layout.addWidget(reports_tabs)
 
-    def _on_add_expense(self):
-        date_str = self.expense_date_edit.date().toString("yyyy-MM-dd")
-        category = self.expense_category_box.currentText()
-        description = self.expense_description_edit.text().strip()
-
-        amount = self.expense_amount_edit.value()
-
-        if amount <= 0.0:
-            # Sem diálogo de erro por simplicidade; apenas ignorar
-            return
-
-        self.expense_controller.add_expense(date_str, category, description, amount)
-        self.expense_description_edit.clear()
-        self.expense_amount_edit.clear()
-        self._refresh_tables()
-        self._load_categories()
-        # Atualiza relatórios após inserção
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
-
-    def _on_add_revenue(self):
-        date_str = self.revenue_date_edit.date().toString("yyyy-MM-dd")
-        category = self.revenue_category_box.currentText()
-        description = self.revenue_description_edit.text().strip()
-
-        amount = self.revenue_amount_edit.value()
-
-        if amount <= 0.0:
-            return
-
-        self.revenue_controller.add_revenue(date_str, category, description, amount)
-        self.revenue_description_edit.clear()
-        self.revenue_amount_edit.clear()
-        self._refresh_tables()
-        # Atualiza relatórios após inserção
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
-
-    def _on_delete_expense(self):
-        selected = self.expense_table.selectionModel().selectedRows()
-        if not selected:
-            return
-        rows = sorted([idx.row() for idx in selected], reverse=True)
-        if not hasattr(self, 'expense_row_to_index'):
-            return
-        indices = []
-        for r in rows:
-            if 0 <= r < len(self.expense_row_to_index):
-                indices.append(self.expense_row_to_index[r])
-        self.expense_controller.delete_expenses(indices)
-        self._refresh_tables()
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
-
-    def _on_edit_expense_prepare(self):
-        selected = self.expense_table.selectionModel().selectedRows()
-        if len(selected) != 1:
-            return
-        row = selected[0].row()
-        # Mapeia a linha visível para o índice real no armazenamento
-        if not hasattr(self, 'expense_row_to_index') or row < 0 or row >= len(self.expense_row_to_index):
-            return
-        full_idx = self.expense_row_to_index[row]
-        items = self.expense_controller.list_expenses()
-        if full_idx < 0 or full_idx >= len(items):
-            return
-        item = items[full_idx]
-        qdate = QDate.fromString(item.get("date", ""), "yyyy-MM-dd")
-        if not qdate.isValid():
-            qdate = QDate.currentDate()
-        self.expense_date_edit.setDate(qdate)
-        # Garante que a categoria exista no combo (sincroniza se necessário)
-        self._ensure_category_in_combo(item.get("category", ""), 'expense')
-        self.expense_category_box.setCurrentText(item.get("category", ""))
-        self.expense_description_edit.setText(item.get("description", ""))
-        # Define texto formatado para o campo de valor
-        amount = float(item.get("amount", 0.0))
-        self.expense_amount_edit.setText(format_currency_brl(amount).replace("R$ ", ""))
-        self.expense_edit_index = full_idx
-        self.expense_save_edit_btn.setEnabled(True)
-        # Desativa ações de adicionar e excluir enquanto edita
-        if hasattr(self, 'expense_add_btn'):
-            self.expense_add_btn.setEnabled(False)
-        if hasattr(self, 'expense_delete_btn'):
-            self.expense_delete_btn.setEnabled(False)
-
-    def _on_save_expense_edit(self):
-        if self.expense_edit_index is None:
-            return
-        date_str = self.expense_date_edit.date().toString("yyyy-MM-dd")
-        category = self.expense_category_box.currentText()
-        description = self.expense_description_edit.text().strip()
-        amount = self.expense_amount_edit.value()
-        if amount <= 0.0:
-            return
-        self.expense_controller.update_expense(self.expense_edit_index, date_str, category, description, amount)
-        # Reset edição
-        self.expense_edit_index = None
-        self.expense_save_edit_btn.setEnabled(False)
-        # Reativa ações de adicionar e excluir
-        if hasattr(self, 'expense_add_btn'):
-            self.expense_add_btn.setEnabled(True)
-        if hasattr(self, 'expense_delete_btn'):
-            self.expense_delete_btn.setEnabled(True)
-        self.expense_description_edit.clear()
-        self.expense_amount_edit.clear()
-        self._refresh_tables()
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
-
-    def _on_delete_revenue(self):
-        selected = self.revenue_table.selectionModel().selectedRows()
-        if not selected:
-            return
-        rows = sorted([idx.row() for idx in selected], reverse=True)
-        if not hasattr(self, 'revenue_row_to_index'):
-            return
-        indices = []
-        for r in rows:
-            if 0 <= r < len(self.revenue_row_to_index):
-                indices.append(self.revenue_row_to_index[r])
-        self.revenue_controller.delete_revenues(indices)
-        self._refresh_tables()
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
-
-    def _on_edit_revenue_prepare(self):
-        selected = self.revenue_table.selectionModel().selectedRows()
-        if len(selected) != 1:
-            return
-        row = selected[0].row()
-        # Mapeia a linha visível para o índice real no armazenamento
-        if not hasattr(self, 'revenue_row_to_index') or row < 0 or row >= len(self.revenue_row_to_index):
-            return
-        full_idx = self.revenue_row_to_index[row]
-        items = self.revenue_controller.list_revenues()
-        if full_idx < 0 or full_idx >= len(items):
-            return
-        item = items[full_idx]
-        qdate = QDate.fromString(item.get("date", ""), "yyyy-MM-dd")
-        if not qdate.isValid():
-            qdate = QDate.currentDate()
-        self.revenue_date_edit.setDate(qdate)
-        self._ensure_category_in_combo(item.get("category", ""), 'revenue')
-        self.revenue_category_box.setCurrentText(item.get("category", ""))
-        self.revenue_description_edit.setText(item.get("description", ""))
-        amount = float(item.get("amount", 0.0))
-        self.revenue_amount_edit.setText(format_currency_brl(amount).replace("R$ ", ""))
-        self.revenue_edit_index = full_idx
-        self.revenue_save_edit_btn.setEnabled(True)
-        # Desativa ações de adicionar e excluir enquanto edita
-        if hasattr(self, 'revenue_add_btn'):
-            self.revenue_add_btn.setEnabled(False)
-        if hasattr(self, 'revenue_delete_btn'):
-            self.revenue_delete_btn.setEnabled(False)
-
-    def _on_save_revenue_edit(self):
-        if self.revenue_edit_index is None:
-            return
-        date_str = self.revenue_date_edit.date().toString("yyyy-MM-dd")
-        category = self.revenue_category_box.currentText()
-        description = self.revenue_description_edit.text().strip()
-        amount = self.revenue_amount_edit.value()
-        if amount <= 0.0:
-            return
-        self.revenue_controller.update_revenue(self.revenue_edit_index, date_str, category, description, amount)
-        self.revenue_edit_index = None
-        self.revenue_save_edit_btn.setEnabled(False)
-        # Reativa ações de adicionar e excluir
-        if hasattr(self, 'revenue_add_btn'):
-            self.revenue_add_btn.setEnabled(True)
-        if hasattr(self, 'revenue_delete_btn'):
-            self.revenue_delete_btn.setEnabled(True)
-        self.revenue_description_edit.clear()
-        self.revenue_amount_edit.clear()
-        self._refresh_tables()
-        self._load_categories()
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
-
-    # ---------- Investimentos ----------
-    def _load_brokers(self):
-        brokers = self.broker_service.list_all()
-        self.investment_broker_box.clear(); self.investment_broker_box.addItems(brokers)
-        self.aporte_investment_box.clear()
-        # Also refresh aportes combo with investment names
-        invs = self.investment_controller.list_investments()
-        self.aporte_investment_box.addItems([f"{i.get('name','')} ({i.get('broker','')})" for i in invs])
-
-    def _on_add_broker(self):
-        name, ok = QInputDialog.getText(self, "Nova corretora", "Nome:")
-        if not ok:
-            return
-        name = (name or '').strip()
-        if not name:
-            return
-        success = self.broker_service.add_broker(name)
-        if not success:
-            QMessageBox.information(self, "Corretoras", "Corretora já existe.")
-        self._load_brokers()
-        self.investment_broker_box.setCurrentText(name)
-
-    def _on_manage_brokers(self):
-        brokers = self.broker_service.list_all()
-        if not brokers:
-            QMessageBox.information(self, "Corretoras", "Nenhuma corretora encontrada.")
-            return
-        sel, ok = QInputDialog.getItem(self, "Gerenciar corretoras", "Selecione a corretora:", brokers, 0, False)
-        if not ok:
-            return
-        action, ok2 = QInputDialog.getItem(self, "Ação", "Escolha a ação:", ["Renomear", "Excluir"], 0, False)
-        if not ok2:
-            return
-        if action == "Renomear":
-            new_name, ok3 = QInputDialog.getText(self, "Renomear corretora", "Novo nome:", text=sel)
-            if not ok3:
-                return
-            new_name = (new_name or '').strip()
-            if not new_name:
-                return
-            success = self.broker_service.rename_broker(sel, new_name)
-            QMessageBox.information(self, "Corretoras", "Corretora renomeada." if success else "Não foi possível renomear.")
-        else:
-            # Excluir com reatribuição
-            reassign_options = [b for b in brokers if b != sel]
-            if not reassign_options:
-                QMessageBox.information(self, "Corretoras", "Crie outra corretora para reatribuir antes de excluir.")
-                return
-            reassign_to, ok4 = QInputDialog.getItem(self, "Reatribuir investimentos", "Mover para:", reassign_options, 0, False)
-            if not ok4:
-                return
-            success = self.broker_service.delete_broker(sel, reassign_to=reassign_to)
-            QMessageBox.information(self, "Corretoras", "Corretora excluída e investimentos reatribuídos." if success else "Não foi possível excluir.")
-        self._load_brokers()
-        self._refresh_investments()
-
-    def _on_add_investment(self):
-        name = self.investment_name_edit.text().strip()
-        broker = self.investment_broker_box.currentText().strip()
-        start_date = self.investment_start_date_edit.date().toString("yyyy-MM-dd")
-        description = self.investment_description_edit.text().strip()
-        initial_amount = self.investment_initial_amount_edit.value()
-        if not name or not broker:
-            return
-        self.investment_controller.add_investment(name, broker, start_date, description, initial_amount)
-        self.investment_name_edit.clear(); self.investment_description_edit.clear(); self.investment_initial_amount_edit.clear()
-        self._load_brokers()
-        self._refresh_investments()
-
-    def _refresh_investments(self):
-        items = self.investment_controller.list_investments()
-        self.investment_row_to_index = list(range(len(items)))
-        self.investment_table.setRowCount(0)
-        for idx, item in enumerate(items):
-            row = self.investment_table.rowCount()
-            self.investment_table.insertRow(row)
-            self.investment_table.setItem(row, 0, QTableWidgetItem(item.get("name", "")))
-            self.investment_table.setItem(row, 1, QTableWidgetItem(item.get("broker", "")))
-            self.investment_table.setItem(row, 2, QTableWidgetItem(format_date_brl(item.get("start_date", ""))))
-            init_item = QTableWidgetItem(format_currency_brl(item.get("initial_amount", 0.0)))
-            init_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.investment_table.setItem(row, 3, init_item)
-            # Aportes e total
-            contrib_sum = self.investment_controller.contributions_sum(idx)
-            contrib_item = QTableWidgetItem(format_currency_brl(contrib_sum))
-            contrib_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.investment_table.setItem(row, 4, contrib_item)
-            total_item = QTableWidgetItem(format_currency_brl(float(item.get("initial_amount", 0.0)) + contrib_sum))
-            total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.investment_table.setItem(row, 5, total_item)
-        # Total investido geral
-        total = self.investment_controller.total_invested()
-        self.investment_total_label.setText(f"Total investido: {format_currency_brl(total)}")
-        # Atualiza combo de aportes
-        self._load_brokers()
-        # Atualiza tabela de aportes para o investimento selecionado
-        self._refresh_contributions_table()
-
-    def _on_delete_investment(self):
-        selected = self.investment_table.selectionModel().selectedRows()
-        if not selected:
-            return
-        indices = []
-        for s in selected:
-            row = s.row()
-            if row < 0 or row >= len(self.investment_row_to_index):
-                continue
-            indices.append(self.investment_row_to_index[row])
-        if indices:
-            self.investment_controller.delete_investments(indices)
-            self._refresh_investments()
-
-    def _on_edit_investment_prepare(self):
-        selected = self.investment_table.selectionModel().selectedRows()
-        if len(selected) != 1:
-            return
-        row = selected[0].row()
-        if not hasattr(self, 'investment_row_to_index') or row < 0 or row >= len(self.investment_row_to_index):
-            return
-        full_idx = self.investment_row_to_index[row]
-        items = self.investment_controller.list_investments()
-        if full_idx < 0 or full_idx >= len(items):
-            return
-        item = items[full_idx]
-        self.investment_name_edit.setText(item.get("name", ""))
-        # Garante corretora no combo
-        broker = item.get("broker", "")
-        if broker and broker not in [self.investment_broker_box.itemText(i) for i in range(self.investment_broker_box.count())]:
-            self.broker_service.add_broker(broker)
-            self._load_brokers()
-        self.investment_broker_box.setCurrentText(broker)
-        qdate = QDate.fromString(item.get("start_date", ""), "yyyy-MM-dd")
-        if not qdate.isValid():
-            qdate = QDate.currentDate()
-        self.investment_start_date_edit.setDate(qdate)
-        self.investment_description_edit.setText(item.get("description", ""))
-        self.investment_initial_amount_edit.setText(format_currency_brl(float(item.get("initial_amount", 0.0))).replace("R$ ", ""))
-        self.investment_edit_index = full_idx
-        self.investment_save_edit_btn.setEnabled(True)
-        if hasattr(self, 'investment_add_btn'):
-            self.investment_add_btn.setEnabled(False)
-        if hasattr(self, 'investment_delete_btn'):
-            self.investment_delete_btn.setEnabled(False)
-
-    def _on_save_investment_edit(self):
-        if self.investment_edit_index is None:
-            return
-        name = self.investment_name_edit.text().strip()
-        broker = self.investment_broker_box.currentText().strip()
-        start_date = self.investment_start_date_edit.date().toString("yyyy-MM-dd")
-        description = self.investment_description_edit.text().strip()
-        initial_amount = self.investment_initial_amount_edit.value()
-        if not name or not broker:
-            return
-        self.investment_controller.update_investment(self.investment_edit_index, name, broker, start_date, description, initial_amount)
-        self.investment_edit_index = None
-        self.investment_save_edit_btn.setEnabled(False)
-        if hasattr(self, 'investment_add_btn'):
-            self.investment_add_btn.setEnabled(True)
-        if hasattr(self, 'investment_delete_btn'):
-            self.investment_delete_btn.setEnabled(True)
-        self.investment_name_edit.clear(); self.investment_description_edit.clear(); self.investment_initial_amount_edit.clear()
-        self._refresh_investments()
-
-    def _on_investment_selection_changed(self):
-        selected = self.investment_table.selectionModel().selectedRows()
-        if len(selected) == 1:
-            row = selected[0].row()
-            if hasattr(self, 'investment_row_to_index') and 0 <= row < len(self.investment_row_to_index):
-                self.current_investment_index = self.investment_row_to_index[row]
-                # Atualiza combo de aportes para refletir seleção
-                items = self.investment_controller.list_investments()
-                if 0 <= self.current_investment_index < len(items):
-                    label = f"{items[self.current_investment_index].get('name','')} ({items[self.current_investment_index].get('broker','')})"
-                    idx = self.aporte_investment_box.findText(label)
-                    if idx >= 0:
-                        self.aporte_investment_box.setCurrentIndex(idx)
-        self._refresh_contributions_table()
-
-    def _investment_index_for_aporte(self) -> int | None:
-        # Mapeia seleção do combo de aportes para índice de investimento
-        labels = [f"{i.get('name','')} ({i.get('broker','')})" for i in self.investment_controller.list_investments()]
-        cur = self.aporte_investment_box.currentText()
-        try:
-            return labels.index(cur)
-        except ValueError:
-            return self.current_investment_index
-
-    def _refresh_contributions_table(self):
-        inv_idx = self._investment_index_for_aporte()
-        if inv_idx is None:
-            self.contributions_table.setRowCount(0)
-            self.contribution_row_to_index = []
-            return
-        contribs = self.investment_controller.list_contributions(inv_idx)
-        self.contribution_row_to_index = list(range(len(contribs)))
-        self.contributions_table.setRowCount(0)
-        for item in contribs:
-            row = self.contributions_table.rowCount()
-            self.contributions_table.insertRow(row)
-            self.contributions_table.setItem(row, 0, QTableWidgetItem(format_date_brl(item.get('date',''))))
-            self.contributions_table.setItem(row, 1, QTableWidgetItem(item.get('description','')))
-            amt_item = QTableWidgetItem(format_currency_brl(item.get('amount',0.0)))
-            amt_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.contributions_table.setItem(row, 2, amt_item)
-
-    def _on_add_aporte(self):
-        inv_idx = self._investment_index_for_aporte()
-        if inv_idx is None:
-            return
-        date_str = self.aporte_date_edit.date().toString("yyyy-MM-dd")
-        description = self.aporte_description_edit.text().strip()
-        amount = self.aporte_amount_edit.value()
-        if amount <= 0.0:
-            return
-        self.investment_controller.add_contribution(inv_idx, date_str, description, amount)
-        self.aporte_description_edit.clear(); self.aporte_amount_edit.clear()
-        self._refresh_investments()
-
-    def _on_delete_aporte(self):
-        inv_idx = self._investment_index_for_aporte()
-        if inv_idx is None:
-            return
-        selected = self.contributions_table.selectionModel().selectedRows()
-        if not selected:
-            return
-        indices = []
-        for s in selected:
-            row = s.row()
-            if row < 0 or row >= len(self.contribution_row_to_index):
-                continue
-            indices.append(self.contribution_row_to_index[row])
-        if indices:
-            self.investment_controller.delete_contributions(inv_idx, indices)
-            self._refresh_investments()
+    
 
     def _load_categories(self):
-        # Carrega categorias do banco para ambos combos
-        expense_cats = self.category_service.list_by_type('expense')
-        revenue_cats = self.category_service.list_by_type('revenue')
-        self.expense_category_box.clear(); self.expense_category_box.addItems(expense_cats)
-        self.revenue_category_box.clear(); self.revenue_category_box.addItems(revenue_cats)
+        # Delegar recarga de categorias às abas dedicadas
+        if hasattr(self, 'expenses_tab'):
+            try:
+                self.expenses_tab.reload_categories()
+            except Exception:
+                pass
+        if hasattr(self, 'revenues_tab'):
+            try:
+                self.revenues_tab.reload_categories()
+            except Exception:
+                pass
 
-    def _on_add_category(self, cat_type: str):
-        name, ok = QInputDialog.getText(self, "Nova categoria", "Nome da categoria:")
-        if not ok:
-            return
-        name = name.strip()
-        if not name:
-            return
-        success = self.category_service.add_category(name, cat_type)
-        if not success:
-            QMessageBox.information(self, "Categorias", "Categoria já existe.")
-        self._load_categories()
-        # Seleciona a recém criada
-        if cat_type == 'expense':
-            self.expense_category_box.setCurrentText(name)
-        else:
-            self.revenue_category_box.setCurrentText(name)
-
-    def _ensure_category_in_combo(self, name: str, cat_type: str):
-        name = (name or '').strip()
-        if not name:
-            return
-        # Se a categoria de um item não estiver ainda cadastrada, insere e recarrega
-        if cat_type == 'expense':
-            items = [self.expense_category_box.itemText(i) for i in range(self.expense_category_box.count())]
-        else:
-            items = [self.revenue_category_box.itemText(i) for i in range(self.revenue_category_box.count())]
-        if name not in items:
-            self.category_service.add_category(name, cat_type)
-            self._load_categories()
-
-    def _on_manage_categories(self, cat_type: str):
-        # Selecionar categoria para gerenciar
-        cats = self.category_service.list_by_type(cat_type)
-        if not cats:
-            QMessageBox.information(self, "Categorias", "Nenhuma categoria encontrada.")
-            return
-        sel, ok = QInputDialog.getItem(self, "Gerenciar categorias", "Selecione a categoria:", cats, 0, False)
-        if not ok:
-            return
-        action, ok2 = QInputDialog.getItem(self, "Ação", "Escolha a ação:", ["Renomear", "Excluir"], 0, False)
-        if not ok2:
-            return
-        if action == "Renomear":
-            new_name, ok3 = QInputDialog.getText(self, "Renomear categoria", "Novo nome:", text=sel)
-            if not ok3:
-                return
-            new_name = new_name.strip()
-            if not new_name:
-                return
-            success = self.category_service.rename_category(sel, new_name, cat_type)
-            if success:
-                QMessageBox.information(self, "Categorias", "Categoria renomeada com sucesso.")
-            else:
-                QMessageBox.warning(self, "Categorias", "Não foi possível renomear a categoria.")
-        else:
-            # Exclusão com reatribuição
-            # Garantir opção "Outros"
-            self.category_service.add_category("Outros", cat_type)
-            reassign_options = [c for c in cats if c != sel]
-            if "Outros" not in reassign_options:
-                reassign_options.append("Outros")
-            if not reassign_options:
-                QMessageBox.information(self, "Categorias", "Crie outra categoria para reatribuir antes de excluir.")
-                return
-            reassign_to, ok4 = QInputDialog.getItem(self, "Reatribuir lançamentos", "Mover lançamentos para:", reassign_options, 0, False)
-            if not ok4:
-                return
-            success = self.category_service.delete_category(sel, cat_type, reassign_to=reassign_to)
-            if success:
-                QMessageBox.information(self, "Categorias", "Categoria excluída e lançamentos reatribuídos.")
-            else:
-                QMessageBox.warning(self, "Categorias", "Não foi possível excluir a categoria.")
-        # Recarregar UI
-        self._load_categories()
-        self._refresh_tables()
-        if hasattr(self, '_refresh_reports'):
-            self._refresh_reports()
+    
     def _refresh_tables(self):
         # Mês selecionado
         sel_qdate = self.month_filter.date()
@@ -933,29 +240,37 @@ class MainWindow(QMainWindow):
         # Despesas
         expenses = self.expense_controller.list_expenses()
         # Filtrar por mês selecionado e mapear linha→índice real
-        self.expense_row_to_index = []
+        expense_row_to_index = []
         expenses_month = []
         for idx, item in enumerate(expenses):
             try:
                 dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
                 if dt.year == sel_year and dt.month == sel_month:
                     expenses_month.append(item)
-                    self.expense_row_to_index.append(idx)
+                    expense_row_to_index.append(idx)
             except Exception:
                 continue
-        self.expense_table.setRowCount(0)
+        if hasattr(self, 'expenses_tab'):
+            self.expenses_tab.expense_row_to_index = expense_row_to_index
+            table = self.expenses_tab.expense_table
+            total_label = self.expenses_tab.expense_total_label
+        else:
+            self.expense_row_to_index = expense_row_to_index
+            table = self.expense_table
+            total_label = self.expense_total_label
+        table.setRowCount(0)
         for item in expenses_month:
-            row = self.expense_table.rowCount()
-            self.expense_table.insertRow(row)
-            self.expense_table.setItem(row, 0, QTableWidgetItem(format_date_brl(item.get("date", ""))))
-            self.expense_table.setItem(row, 1, QTableWidgetItem(item.get("category", "")))
-            self.expense_table.setItem(row, 2, QTableWidgetItem(item.get("description", "")))
+            row = table.rowCount()
+            table.insertRow(row)
+            table.setItem(row, 0, QTableWidgetItem(format_date_brl(item.get("date", ""))))
+            table.setItem(row, 1, QTableWidgetItem(item.get("category", "")))
+            table.setItem(row, 2, QTableWidgetItem(item.get("description", "")))
             amount_item = QTableWidgetItem(format_currency_brl(item.get("amount", 0.0)))
             amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.expense_table.setItem(row, 3, amount_item)
+            table.setItem(row, 3, amount_item)
 
         expense_month_total = sum(float(i.get("amount", 0.0)) for i in expenses_month)
-        self.expense_total_label.setText(f"Total do mês: {format_currency_brl(expense_month_total)}")
+        total_label.setText(f"Total do mês: {format_currency_brl(expense_month_total)}")
 
         # Receitas
         revenues = self.revenue_controller.list_revenues()
@@ -970,19 +285,26 @@ class MainWindow(QMainWindow):
                     self.revenue_row_to_index.append(idx)
             except Exception:
                 continue
-        self.revenue_table.setRowCount(0)
+        if hasattr(self, 'revenues_tab'):
+            self.revenues_tab.revenue_row_to_index = self.revenue_row_to_index
+            rtable = self.revenues_tab.revenue_table
+            rtotal_label = self.revenues_tab.revenue_total_label
+        else:
+            rtable = self.revenue_table
+            rtotal_label = self.revenue_total_label
+        rtable.setRowCount(0)
         for item in revenues_month:
-            row = self.revenue_table.rowCount()
-            self.revenue_table.insertRow(row)
-            self.revenue_table.setItem(row, 0, QTableWidgetItem(format_date_brl(item.get("date", ""))))
-            self.revenue_table.setItem(row, 1, QTableWidgetItem(item.get("category", "")))
-            self.revenue_table.setItem(row, 2, QTableWidgetItem(item.get("description", "")))
+            row = rtable.rowCount()
+            rtable.insertRow(row)
+            rtable.setItem(row, 0, QTableWidgetItem(format_date_brl(item.get("date", ""))))
+            rtable.setItem(row, 1, QTableWidgetItem(item.get("category", "")))
+            rtable.setItem(row, 2, QTableWidgetItem(item.get("description", "")))
             amount_item = QTableWidgetItem(format_currency_brl(item.get("amount", 0.0)))
             amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.revenue_table.setItem(row, 3, amount_item)
+            rtable.setItem(row, 3, amount_item)
 
         revenue_month_total = sum(float(i.get("amount", 0.0)) for i in revenues_month)
-        self.revenue_total_label.setText(f"Total do mês: {format_currency_brl(revenue_month_total)}")
+        rtotal_label.setText(f"Total do mês: {format_currency_brl(revenue_month_total)}")
 
         # Totais acumulados até o fim do mês selecionado
         expenses_cum = 0.0
@@ -1174,32 +496,22 @@ class MainWindow(QMainWindow):
                 self.month_filter.calendarWidget().setFirstDayOfWeek(Qt.Monday)
             except Exception:
                 pass
-        if hasattr(self, 'expense_date_edit') and isinstance(self.expense_date_edit, QDateEdit):
-            self.expense_date_edit.setLocale(br)
-            self.expense_date_edit.setDisplayFormat("dd/MM/yyyy")
+        # Delegar locale da aba de despesas para a classe dedicada
+        if hasattr(self, 'expenses_tab'):
             try:
-                self.expense_date_edit.calendarWidget().setFirstDayOfWeek(Qt.Monday)
+                self.expenses_tab.apply_locale(br)
             except Exception:
                 pass
-        if hasattr(self, 'revenue_date_edit') and isinstance(self.revenue_date_edit, QDateEdit):
-            self.revenue_date_edit.setLocale(br)
-            self.revenue_date_edit.setDisplayFormat("dd/MM/yyyy")
+        # Delegar locale da aba de receitas para a classe dedicada
+        if hasattr(self, 'revenues_tab'):
             try:
-                self.revenue_date_edit.calendarWidget().setFirstDayOfWeek(Qt.Monday)
+                self.revenues_tab.apply_locale(br)
             except Exception:
                 pass
-        # Investimentos
-        if hasattr(self, 'investment_start_date_edit') and isinstance(self.investment_start_date_edit, QDateEdit):
-            self.investment_start_date_edit.setLocale(br)
-            self.investment_start_date_edit.setDisplayFormat("dd/MM/yyyy")
+        # Delegar locale da aba de investimentos para a classe dedicada
+        if hasattr(self, 'investments_tab'):
             try:
-                self.investment_start_date_edit.calendarWidget().setFirstDayOfWeek(Qt.Monday)
+                self.investments_tab.apply_locale(br)
             except Exception:
                 pass
-        if hasattr(self, 'aporte_date_edit') and isinstance(self.aporte_date_edit, QDateEdit):
-            self.aporte_date_edit.setLocale(br)
-            self.aporte_date_edit.setDisplayFormat("dd/MM/yyyy")
-            try:
-                self.aporte_date_edit.calendarWidget().setFirstDayOfWeek(Qt.Monday)
-            except Exception:
-                pass
+        # Investimentos: locale agora é aplicado pela InvestmentsTab
