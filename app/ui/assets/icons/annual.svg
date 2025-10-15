@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="5" width="18" height="16" rx="3" ry="3"/>
+  <line x1="8" y1="3" x2="8" y2="7"/>
+  <line x1="16" y1="3" x2="16" y2="7"/>
+  <line x1="3" y1="9" x2="21" y2="9"/>
+  <!-- Indicador de ano: barra no topo -->
+  <line x1="6" y1="12" x2="18" y2="12"/>
+  <!-- Três marcadores para trimestres -->
+  <circle cx="8" cy="16" r="1.2"/>
+  <circle cx="12" cy="16" r="1.2"/>
+  <circle cx="16" cy="16" r="1.2"/>
+</svg>

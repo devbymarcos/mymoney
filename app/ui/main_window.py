@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QLabel, QHBoxLayout, QTabWidget, QHeaderView, QFrame, QInputDialog, QMessageBox
 )
 import os
-from PyQt5.QtCore import QDate, Qt
+from PyQt5.QtCore import QDate, Qt, QSize, QLocale
 from PyQt5.QtGui import QIcon
 from datetime import datetime, timedelta
 
@@ -26,12 +26,17 @@ class MainWindow(QMainWindow):
         self.expense_edit_index = None
         self.revenue_edit_index = None
         self._setup_ui()
+        # Locale pt-BR para calendários e datas
+        self._apply_locale()
         self.setMinimumSize(1024, 700)
         self.resize(1280, 800)
         self._apply_theme()
         # Garantir que os combos de categoria sejam preenchidos na inicialização
         self._load_categories()
         self._refresh_tables()
+        # Inicializa relatórios na carga
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _setup_ui(self):
         central = QWidget(self)
@@ -53,6 +58,8 @@ class MainWindow(QMainWindow):
 
         # Abas
         self.tabs = QTabWidget()
+        # Evita elipse/truncamento de texto nos títulos das abas
+        self.tabs.setElideMode(Qt.ElideNone)
         layout.addWidget(self.tabs)
 
         # Aba Despesas
@@ -68,6 +75,13 @@ class MainWindow(QMainWindow):
         self._build_revenue_section(revenue_layout)
         self.tabs.addTab(revenue_tab, "Receitas")
         self.tabs.setTabIcon(1, QIcon(os.path.join(ICONS_DIR, "revenue.svg")))
+
+        # Aba Relatórios
+        reports_tab = QWidget()
+        reports_layout = QVBoxLayout(); reports_tab.setLayout(reports_layout)
+        self._build_reports_section(reports_layout)
+        self.tabs.addTab(reports_tab, "Relatórios")
+        self.tabs.setTabIcon(2, QIcon(os.path.join(ICONS_DIR, "report.svg")))
 
         # Totais gerais (cards)
         self.summary_container = QFrame()
@@ -103,7 +117,7 @@ class MainWindow(QMainWindow):
 
     def _build_expense_section(self, parent_layout: QVBoxLayout):
         form_layout = QFormLayout()
-        self.expense_date_edit = QDateEdit(); self.expense_date_edit.setCalendarPopup(True); self.expense_date_edit.setDate(QDate.currentDate())
+        self.expense_date_edit = QDateEdit(); self.expense_date_edit.setCalendarPopup(True); self.expense_date_edit.setDisplayFormat("dd/MM/yyyy"); self.expense_date_edit.setDate(QDate.currentDate())
         self.expense_category_box = QComboBox()
         exp_cat_row = QHBoxLayout()
         exp_cat_row.addWidget(self.expense_category_box)
@@ -149,7 +163,7 @@ class MainWindow(QMainWindow):
 
     def _build_revenue_section(self, parent_layout: QVBoxLayout):
         form_layout = QFormLayout()
-        self.revenue_date_edit = QDateEdit(); self.revenue_date_edit.setCalendarPopup(True); self.revenue_date_edit.setDate(QDate.currentDate())
+        self.revenue_date_edit = QDateEdit(); self.revenue_date_edit.setCalendarPopup(True); self.revenue_date_edit.setDisplayFormat("dd/MM/yyyy"); self.revenue_date_edit.setDate(QDate.currentDate())
         self.revenue_category_box = QComboBox()
         rev_cat_row = QHBoxLayout()
         rev_cat_row.addWidget(self.revenue_category_box)
@@ -192,6 +206,81 @@ class MainWindow(QMainWindow):
         self.revenue_total_label = QLabel("Total de receitas: R$ 0,00")
         parent_layout.addWidget(self.revenue_total_label)
 
+    def _build_reports_section(self, parent_layout: QVBoxLayout):
+        # Título da seção
+        title = QLabel("Relatórios por categoria")
+        title.setObjectName("cardTitle")
+        parent_layout.addWidget(title)
+
+        # Sub-abas dentro de Relatórios: Mensal e Anual
+        reports_tabs = QTabWidget()
+        reports_tabs.setElideMode(Qt.ElideNone)
+        # Tamanho dos ícones das sub-abas
+        reports_tabs.setIconSize(QSize(16, 16))
+
+        monthly_tab = QWidget(); monthly_layout = QVBoxLayout(); monthly_tab.setLayout(monthly_layout)
+        annual_tab = QWidget(); annual_layout = QVBoxLayout(); annual_tab.setLayout(annual_layout)
+
+        # Relatório de despesas por categoria
+        exp_label = QLabel("Despesas por categoria")
+        monthly_layout.addWidget(exp_label)
+        self.expense_report_table = QTableWidget(0, 3)
+        self.expense_report_table.setHorizontalHeaderLabels(["Categoria", "Total (R$)", "Percentual"])
+        self.expense_report_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.expense_report_table.setAlternatingRowColors(True)
+        self.expense_report_table.setShowGrid(False)
+        monthly_layout.addWidget(self.expense_report_table)
+
+        # Relatório de receitas por categoria
+        rev_label = QLabel("Receitas por categoria")
+        monthly_layout.addWidget(rev_label)
+        self.revenue_report_table = QTableWidget(0, 3)
+        self.revenue_report_table.setHorizontalHeaderLabels(["Categoria", "Total (R$)", "Percentual"])
+        self.revenue_report_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.revenue_report_table.setAlternatingRowColors(True)
+        self.revenue_report_table.setShowGrid(False)
+        monthly_layout.addWidget(self.revenue_report_table)
+
+        # Adiciona aba Mensal com ícone
+        reports_tabs.addTab(monthly_tab, "Mensal")
+        reports_tabs.setTabIcon(reports_tabs.indexOf(monthly_tab), QIcon(os.path.join(ICONS_DIR, "monthly.svg")))
+
+        # Seção: Relatório anual por categoria
+        annual_title = QLabel("Relatório anual por categoria (usa ano do filtro)")
+        annual_title.setObjectName("cardTitle")
+        annual_layout.addWidget(annual_title)
+
+        # Despesas por mês no ano
+        exp_year_label = QLabel("Despesas por mês (ano)")
+        annual_layout.addWidget(exp_year_label)
+        self.expense_annual_table = QTableWidget(0, 13)
+        self.expense_annual_table.setHorizontalHeaderLabels([
+            "Categoria", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+            "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+        ])
+        self.expense_annual_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.expense_annual_table.setAlternatingRowColors(True)
+        self.expense_annual_table.setShowGrid(False)
+        annual_layout.addWidget(self.expense_annual_table)
+
+        # Receitas por mês no ano
+        rev_year_label = QLabel("Receitas por mês (ano)")
+        annual_layout.addWidget(rev_year_label)
+        self.revenue_annual_table = QTableWidget(0, 13)
+        self.revenue_annual_table.setHorizontalHeaderLabels([
+            "Categoria", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+            "Jul", "Ago", "Set", "Out", "Nov", "Dez"
+        ])
+        self.revenue_annual_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.revenue_annual_table.setAlternatingRowColors(True)
+        self.revenue_annual_table.setShowGrid(False)
+        annual_layout.addWidget(self.revenue_annual_table)
+
+        # Adiciona aba Anual com ícone e insere as sub-abas no layout principal
+        reports_tabs.addTab(annual_tab, "Anual")
+        reports_tabs.setTabIcon(reports_tabs.indexOf(annual_tab), QIcon(os.path.join(ICONS_DIR, "annual.svg")))
+        parent_layout.addWidget(reports_tabs)
+
     def _on_add_expense(self):
         date_str = self.expense_date_edit.date().toString("yyyy-MM-dd")
         category = self.expense_category_box.currentText()
@@ -208,6 +297,9 @@ class MainWindow(QMainWindow):
         self.expense_amount_edit.clear()
         self._refresh_tables()
         self._load_categories()
+        # Atualiza relatórios após inserção
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _on_add_revenue(self):
         date_str = self.revenue_date_edit.date().toString("yyyy-MM-dd")
@@ -223,24 +315,39 @@ class MainWindow(QMainWindow):
         self.revenue_description_edit.clear()
         self.revenue_amount_edit.clear()
         self._refresh_tables()
+        # Atualiza relatórios após inserção
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _on_delete_expense(self):
         selected = self.expense_table.selectionModel().selectedRows()
         if not selected:
             return
-        indices = sorted([idx.row() for idx in selected], reverse=True)
+        rows = sorted([idx.row() for idx in selected], reverse=True)
+        if not hasattr(self, 'expense_row_to_index'):
+            return
+        indices = []
+        for r in rows:
+            if 0 <= r < len(self.expense_row_to_index):
+                indices.append(self.expense_row_to_index[r])
         self.expense_controller.delete_expenses(indices)
         self._refresh_tables()
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _on_edit_expense_prepare(self):
         selected = self.expense_table.selectionModel().selectedRows()
         if len(selected) != 1:
             return
         row = selected[0].row()
-        items = self.expense_controller.list_expenses()
-        if row < 0 or row >= len(items):
+        # Mapeia a linha visível para o índice real no armazenamento
+        if not hasattr(self, 'expense_row_to_index') or row < 0 or row >= len(self.expense_row_to_index):
             return
-        item = items[row]
+        full_idx = self.expense_row_to_index[row]
+        items = self.expense_controller.list_expenses()
+        if full_idx < 0 or full_idx >= len(items):
+            return
+        item = items[full_idx]
         qdate = QDate.fromString(item.get("date", ""), "yyyy-MM-dd")
         if not qdate.isValid():
             qdate = QDate.currentDate()
@@ -252,7 +359,7 @@ class MainWindow(QMainWindow):
         # Define texto formatado para o campo de valor
         amount = float(item.get("amount", 0.0))
         self.expense_amount_edit.setText(format_currency_brl(amount).replace("R$ ", ""))
-        self.expense_edit_index = row
+        self.expense_edit_index = full_idx
         self.expense_save_edit_btn.setEnabled(True)
         # Desativa ações de adicionar e excluir enquanto edita
         if hasattr(self, 'expense_add_btn'):
@@ -281,24 +388,38 @@ class MainWindow(QMainWindow):
         self.expense_description_edit.clear()
         self.expense_amount_edit.clear()
         self._refresh_tables()
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _on_delete_revenue(self):
         selected = self.revenue_table.selectionModel().selectedRows()
         if not selected:
             return
-        indices = sorted([idx.row() for idx in selected], reverse=True)
+        rows = sorted([idx.row() for idx in selected], reverse=True)
+        if not hasattr(self, 'revenue_row_to_index'):
+            return
+        indices = []
+        for r in rows:
+            if 0 <= r < len(self.revenue_row_to_index):
+                indices.append(self.revenue_row_to_index[r])
         self.revenue_controller.delete_revenues(indices)
         self._refresh_tables()
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _on_edit_revenue_prepare(self):
         selected = self.revenue_table.selectionModel().selectedRows()
         if len(selected) != 1:
             return
         row = selected[0].row()
-        items = self.revenue_controller.list_revenues()
-        if row < 0 or row >= len(items):
+        # Mapeia a linha visível para o índice real no armazenamento
+        if not hasattr(self, 'revenue_row_to_index') or row < 0 or row >= len(self.revenue_row_to_index):
             return
-        item = items[row]
+        full_idx = self.revenue_row_to_index[row]
+        items = self.revenue_controller.list_revenues()
+        if full_idx < 0 or full_idx >= len(items):
+            return
+        item = items[full_idx]
         qdate = QDate.fromString(item.get("date", ""), "yyyy-MM-dd")
         if not qdate.isValid():
             qdate = QDate.currentDate()
@@ -308,7 +429,7 @@ class MainWindow(QMainWindow):
         self.revenue_description_edit.setText(item.get("description", ""))
         amount = float(item.get("amount", 0.0))
         self.revenue_amount_edit.setText(format_currency_brl(amount).replace("R$ ", ""))
-        self.revenue_edit_index = row
+        self.revenue_edit_index = full_idx
         self.revenue_save_edit_btn.setEnabled(True)
         # Desativa ações de adicionar e excluir enquanto edita
         if hasattr(self, 'revenue_add_btn'):
@@ -337,6 +458,8 @@ class MainWindow(QMainWindow):
         self.revenue_amount_edit.clear()
         self._refresh_tables()
         self._load_categories()
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _load_categories(self):
         # Carrega categorias do banco para ambos combos
@@ -420,6 +543,8 @@ class MainWindow(QMainWindow):
         # Recarregar UI
         self._load_categories()
         self._refresh_tables()
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
     def _refresh_tables(self):
         # Mês selecionado
         sel_qdate = self.month_filter.date()
@@ -433,13 +558,15 @@ class MainWindow(QMainWindow):
 
         # Despesas
         expenses = self.expense_controller.list_expenses()
-        # Filtrar por mês selecionado
+        # Filtrar por mês selecionado e mapear linha→índice real
+        self.expense_row_to_index = []
         expenses_month = []
-        for item in expenses:
+        for idx, item in enumerate(expenses):
             try:
                 dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
                 if dt.year == sel_year and dt.month == sel_month:
                     expenses_month.append(item)
+                    self.expense_row_to_index.append(idx)
             except Exception:
                 continue
         self.expense_table.setRowCount(0)
@@ -458,12 +585,15 @@ class MainWindow(QMainWindow):
 
         # Receitas
         revenues = self.revenue_controller.list_revenues()
+        # Filtrar por mês selecionado e mapear linha→índice real
+        self.revenue_row_to_index = []
         revenues_month = []
-        for item in revenues:
+        for idx, item in enumerate(revenues):
             try:
                 dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
                 if dt.year == sel_year and dt.month == sel_month:
                     revenues_month.append(item)
+                    self.revenue_row_to_index.append(idx)
             except Exception:
                 continue
         self.revenue_table.setRowCount(0)
@@ -515,8 +645,118 @@ class MainWindow(QMainWindow):
         else:
             self.balance_value_label.setStyleSheet("color:#b91c1c;")
 
+    def _refresh_reports(self):
+        # Mês selecionado
+        sel_qdate = self.month_filter.date()
+        sel_year = sel_qdate.year()
+        sel_month = sel_qdate.month()
+
+        # Agregação de despesas por categoria
+        exp_sums = {}
+        for item in self.expense_controller.list_expenses():
+            try:
+                dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
+                if dt.year == sel_year and dt.month == sel_month:
+                    cat = (item.get("category", "") or "").strip() or "(Sem categoria)"
+                    exp_sums[cat] = exp_sums.get(cat, 0.0) + float(item.get("amount", 0.0))
+            except Exception:
+                continue
+        # Preencher tabela de despesas
+        self.expense_report_table.setRowCount(0)
+        exp_total_month = sum(exp_sums.values()) if exp_sums else 0.0
+        for cat in sorted(exp_sums.keys()):
+            row = self.expense_report_table.rowCount()
+            self.expense_report_table.insertRow(row)
+            self.expense_report_table.setItem(row, 0, QTableWidgetItem(cat))
+            amt_item = QTableWidgetItem(format_currency_brl(exp_sums[cat]))
+            amt_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.expense_report_table.setItem(row, 1, amt_item)
+            # Percentual da categoria em relação ao total do mês
+            pct = (exp_sums[cat] / exp_total_month * 100.0) if exp_total_month > 0 else 0.0
+            pct_str = f"{pct:.1f}%".replace('.', ',')
+            pct_item = QTableWidgetItem(pct_str)
+            pct_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.expense_report_table.setItem(row, 2, pct_item)
+
+        # Agregação de receitas por categoria
+        rev_sums = {}
+        for item in self.revenue_controller.list_revenues():
+            try:
+                dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
+                if dt.year == sel_year and dt.month == sel_month:
+                    cat = (item.get("category", "") or "").strip() or "(Sem categoria)"
+                    rev_sums[cat] = rev_sums.get(cat, 0.0) + float(item.get("amount", 0.0))
+            except Exception:
+                continue
+        # Preencher tabela de receitas
+        self.revenue_report_table.setRowCount(0)
+        rev_total_month = sum(rev_sums.values()) if rev_sums else 0.0
+        for cat in sorted(rev_sums.keys()):
+            row = self.revenue_report_table.rowCount()
+            self.revenue_report_table.insertRow(row)
+            self.revenue_report_table.setItem(row, 0, QTableWidgetItem(cat))
+            amt_item = QTableWidgetItem(format_currency_brl(rev_sums[cat]))
+            amt_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.revenue_report_table.setItem(row, 1, amt_item)
+            # Percentual da categoria em relação ao total do mês
+            pct = (rev_sums[cat] / rev_total_month * 100.0) if rev_total_month > 0 else 0.0
+            pct_str = f"{pct:.1f}%".replace('.', ',')
+            pct_item = QTableWidgetItem(pct_str)
+            pct_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.revenue_report_table.setItem(row, 2, pct_item)
+
+        # Relatório anual: despesas por mês e categoria
+        exp_year_sums = {}
+        for item in self.expense_controller.list_expenses():
+            try:
+                dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
+                if dt.year == sel_year:
+                    cat = (item.get("category", "") or "").strip() or "(Sem categoria)"
+                    arr = exp_year_sums.get(cat)
+                    if arr is None:
+                        arr = [0.0] * 12
+                        exp_year_sums[cat] = arr
+                    arr[dt.month - 1] += float(item.get("amount", 0.0))
+            except Exception:
+                continue
+        self.expense_annual_table.setRowCount(0)
+        for cat in sorted(exp_year_sums.keys()):
+            row = self.expense_annual_table.rowCount()
+            self.expense_annual_table.insertRow(row)
+            self.expense_annual_table.setItem(row, 0, QTableWidgetItem(cat))
+            for m in range(12):
+                amt_item = QTableWidgetItem(format_currency_brl(exp_year_sums[cat][m]))
+                amt_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.expense_annual_table.setItem(row, 1 + m, amt_item)
+
+        # Relatório anual: receitas por mês e categoria
+        rev_year_sums = {}
+        for item in self.revenue_controller.list_revenues():
+            try:
+                dt = datetime.strptime(item.get("date", ""), "%Y-%m-%d")
+                if dt.year == sel_year:
+                    cat = (item.get("category", "") or "").strip() or "(Sem categoria)"
+                    arr = rev_year_sums.get(cat)
+                    if arr is None:
+                        arr = [0.0] * 12
+                        rev_year_sums[cat] = arr
+                    arr[dt.month - 1] += float(item.get("amount", 0.0))
+            except Exception:
+                continue
+        self.revenue_annual_table.setRowCount(0)
+        for cat in sorted(rev_year_sums.keys()):
+            row = self.revenue_annual_table.rowCount()
+            self.revenue_annual_table.insertRow(row)
+            self.revenue_annual_table.setItem(row, 0, QTableWidgetItem(cat))
+            for m in range(12):
+                amt_item = QTableWidgetItem(format_currency_brl(rev_year_sums[cat][m]))
+                amt_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.revenue_annual_table.setItem(row, 1 + m, amt_item)
+
     def _on_month_changed(self, *_):
         self._refresh_tables()
+        if hasattr(self, '_refresh_reports'):
+            self._refresh_reports()
 
     def _apply_theme(self):
         # Tema leve com acentos modernos
@@ -525,9 +765,10 @@ class MainWindow(QMainWindow):
             QMainWindow { background: #f8fafc; }
             QLabel { font-size: 12px; }
             QTabWidget::pane { border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px; }
-            QTabBar::tab { background: #e5e7eb; color: #334155; padding: 8px 12px; border-radius: 6px; margin: 2px; }
+            /* Mantém padding e borda consistente para evitar corte do primeiro caractere */
+            QTabBar::tab { background: #e5e7eb; color: #334155; padding: 10px 14px; padding-left: 18px; border-radius: 6px; margin: 2px; border: 2px solid transparent; }
             QTabBar::tab:hover { background: #f1f5f9; color: #1f2937; }
-            QTabBar::tab:selected { background: #1d4ed8; color: #ffffff; font-weight: 700; padding: 10px 14px; border: 2px solid #1d4ed8; }
+            QTabBar::tab:selected { background: #1d4ed8; color: #ffffff; font-weight: 700; padding: 10px 14px; padding-left: 18px; border: 2px solid #1d4ed8; }
             QHeaderView::section { background: #eef2ff; padding: 6px; border: none; font-weight: 600; }
             QTableWidget { alternate-background-color: #ffffff; background: #f8fafc; }
             QTableWidget::item:selected { background: #bfdbfe; color: #111827; }
@@ -545,3 +786,31 @@ class MainWindow(QMainWindow):
             QLabel#cardSub { color: #64748b; font-size: 11px; }
             """
         )
+
+    def _apply_locale(self):
+        # Define locale padrão da aplicação para pt-BR
+        br = QLocale(QLocale.Portuguese, QLocale.Brazil)
+        QLocale.setDefault(br)
+        # Aplica locale aos QDateEdit existentes
+        if hasattr(self, 'month_filter') and isinstance(self.month_filter, QDateEdit):
+            self.month_filter.setLocale(br)
+            # Mantém formato MM/yyyy para filtro de mês
+            self.month_filter.setDisplayFormat("MM/yyyy")
+            try:
+                self.month_filter.calendarWidget().setFirstDayOfWeek(Qt.Monday)
+            except Exception:
+                pass
+        if hasattr(self, 'expense_date_edit') and isinstance(self.expense_date_edit, QDateEdit):
+            self.expense_date_edit.setLocale(br)
+            self.expense_date_edit.setDisplayFormat("dd/MM/yyyy")
+            try:
+                self.expense_date_edit.calendarWidget().setFirstDayOfWeek(Qt.Monday)
+            except Exception:
+                pass
+        if hasattr(self, 'revenue_date_edit') and isinstance(self.revenue_date_edit, QDateEdit):
+            self.revenue_date_edit.setLocale(br)
+            self.revenue_date_edit.setDisplayFormat("dd/MM/yyyy")
+            try:
+                self.revenue_date_edit.calendarWidget().setFirstDayOfWeek(Qt.Monday)
+            except Exception:
+                pass
